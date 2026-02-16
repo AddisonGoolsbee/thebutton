@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;700;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;700;900&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -10,10 +10,12 @@
   --color-warm-white: #f5f0e8;
   --color-warm-gray: #3a3530;
   --color-warm-muted: #6b6560;
-  --font-family-mono: 'Azeret Mono', ui-monospace, monospace;
+  --font-family-mono: "Azeret Mono", ui-monospace, monospace;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   overflow: hidden;
@@ -27,7 +29,9 @@ html, body, #root {
     0 10px 0 0 #802600,
     0 12px 24px 0 rgba(255, 77, 0, 0.3),
     0 0 60px 10px rgba(255, 77, 0, 0.15);
-  transition: transform 50ms ease-out, box-shadow 50ms ease-out;
+  transition:
+    transform 50ms ease-out,
+    box-shadow 50ms ease-out;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
@@ -55,8 +59,15 @@ html, body, #root {
 
 /* Pulsing glow behind button */
 @keyframes breathe {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.08); }
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.08);
+  }
 }
 
 .glow-ring {
@@ -65,6 +76,10 @@ html, body, #root {
 
 /* Subtle count tick flash */
 @keyframes tick-flash {
-  0% { text-shadow: 0 0 30px rgba(255, 77, 0, 0.5); }
-  100% { text-shadow: 0 0 0px rgba(255, 77, 0, 0); }
+  0% {
+    text-shadow: 0 0 30px rgba(255, 77, 0, 0.5);
+  }
+  100% {
+    text-shadow: 0 0 0px rgba(255, 77, 0, 0);
+  }
 }

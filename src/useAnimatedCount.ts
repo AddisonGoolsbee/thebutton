@@ -44,10 +44,7 @@ export function useAnimatedCount(duration = 2000) {
       // Ensure the first tick following a poll is instant so the counter feels responsive.
       const immediate = Math.min(delta, 1);
       if (immediate > 0) {
-        displayRef.current = Math.min(
-          displayRef.current + immediate,
-          targetRef.current,
-        );
+        displayRef.current = Math.min(displayRef.current + immediate, targetRef.current);
         setDisplayCount(displayRef.current);
       }
 
@@ -60,16 +57,10 @@ export function useAnimatedCount(duration = 2000) {
         const perBatch = Math.ceil(animationDelta / batchCount);
         for (let i = 0; i < batchCount; i++) {
           const delay = (i / batchCount) * duration;
-          const inc =
-            i === batchCount - 1
-              ? animationDelta - perBatch * i
-              : perBatch;
+          const inc = i === batchCount - 1 ? animationDelta - perBatch * i : perBatch;
           if (inc <= 0) continue;
           const timer = setTimeout(() => {
-            displayRef.current = Math.min(
-              displayRef.current + inc,
-              targetRef.current,
-            );
+            displayRef.current = Math.min(displayRef.current + inc, targetRef.current);
             setDisplayCount(displayRef.current);
           }, delay);
           timersRef.current.push(timer);
