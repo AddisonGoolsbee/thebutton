@@ -1,0 +1,8 @@
+name = "click-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "thebutton"
+database_id = "d43fad85-a90d-43f5-bf9f-fa30a3e02e65"

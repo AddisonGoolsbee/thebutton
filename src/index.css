@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-void: #08080a;
+  --color-ember: #ff4d00;
+  --color-ember-dark: #cc3d00;
+  --color-ember-glow: #ff4d0040;
+  --color-ember-deep: #ff4d0015;
+  --color-warm-white: #f5f0e8;
+  --color-warm-gray: #3a3530;
+  --color-warm-muted: #6b6560;
+  --font-family-mono: 'Azeret Mono', ui-monospace, monospace;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* 3D button dome */
+.btn-dome {
+  background: radial-gradient(circle at 35% 35%, #ff7040, var(--color-ember) 50%, var(--color-ember-dark) 100%);
+  box-shadow:
+    0 8px 0 0 #992e00,
+    0 10px 0 0 #802600,
+    0 12px 24px 0 rgba(255, 77, 0, 0.3),
+    0 0 60px 10px rgba(255, 77, 0, 0.15);
+  transition: transform 50ms ease-out, box-shadow 50ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.btn-dome:hover {
+  background: radial-gradient(circle at 35% 35%, #ff8855, #ff5c1a 50%, var(--color-ember) 100%);
+  box-shadow:
+    0 8px 0 0 #992e00,
+    0 10px 0 0 #802600,
+    0 12px 24px 0 rgba(255, 77, 0, 0.4),
+    0 0 80px 15px rgba(255, 77, 0, 0.2);
+}
+
+.btn-dome:active,
+.btn-dome.pressed {
+  transform: translateY(6px);
+  box-shadow:
+    0 2px 0 0 #992e00,
+    0 3px 0 0 #802600,
+    0 4px 12px 0 rgba(255, 77, 0, 0.3),
+    0 0 40px 5px rgba(255, 77, 0, 0.1);
+}
+
+/* Pulsing glow behind button */
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.08); }
+}
+
+.glow-ring {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Subtle count tick flash */
+@keyframes tick-flash {
+  0% { text-shadow: 0 0 30px rgba(255, 77, 0, 0.5); }
+  100% { text-shadow: 0 0 0px rgba(255, 77, 0, 0); }
+}
