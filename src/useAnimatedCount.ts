@@ -1,23 +1,57 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 /**
- * Smoothly animates between count values.
+ * Smoothly animates between count values using a continuous rAF loop.
  *
  * - First call to setTarget jumps instantly (page load).
- * - Subsequent calls spread the delta as random increments over `duration` ms.
+ * - Subsequent calls feed a rAF loop that probabilistically increments,
+ *   giving a random "real-time" feel with zero gaps between polls.
  * - addImmediate() is always instant (for your own clicks).
  */
 export function useAnimatedCount(duration = 2000) {
   const [displayCount, setDisplayCount] = useState(0);
   const targetRef = useRef(0);
   const displayRef = useRef(0);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const initializedRef = useRef(false);
+  const rafRef = useRef(0);
+  const lastFrameRef = useRef(0);
 
-  const clearTimers = useCallback(() => {
-    for (const t of timersRef.current) clearTimeout(t);
-    timersRef.current = [];
-  }, []);
+  // rAF tick: each frame, probabilistically increment toward target.
+  // Rate = gap * (dt / duration), giving an organic exponential approach.
+  const tick = useCallback(
+    (now: number) => {
+      const gap = targetRef.current - displayRef.current;
+      if (gap <= 0) {
+        rafRef.current = 0;
+        return;
+      }
+
+      const dt = Math.min(now - lastFrameRef.current, 100); // cap dt to avoid big jumps after tab-switch
+      lastFrameRef.current = now;
+
+      // Expected increments this frame
+      const expected = gap * (dt / duration);
+
+      // Probabilistic rounding gives a natural random feel
+      const floor = Math.floor(expected);
+      const frac = expected - floor;
+      const inc = floor + (Math.random() < frac ? 1 : 0);
+
+      if (inc > 0) {
+        displayRef.current = Math.min(displayRef.current + inc, targetRef.current);
+        setDisplayCount(displayRef.current);
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    },
+    [duration],
+  );
+
+  const startAnimation = useCallback(() => {
+    if (rafRef.current) return; // already running
+    lastFrameRef.current = performance.now();
+    rafRef.current = requestAnimationFrame(tick);
+  }, [tick]);
 
   const setTarget = useCallback(
     (newTarget: number) => {
@@ -34,55 +68,16 @@ export function useAnimatedCount(duration = 2000) {
         return;
       }
 
-      // Clear any pending animations
-      clearTimers();
-
-      // How many increments remain from current display to new target
-      const delta = newTarget - displayRef.current;
-      if (delta <= 0) return;
-
-      // Ensure the first tick following a poll is instant so the counter feels responsive.
-      const immediate = Math.min(delta, 1);
-      if (immediate > 0) {
-        displayRef.current = Math.min(displayRef.current + immediate, targetRef.current);
+      // Show one increment immediately for responsiveness
+      if (displayRef.current < targetRef.current) {
+        displayRef.current += 1;
         setDisplayCount(displayRef.current);
       }
 
-      const animationDelta = delta - immediate;
-      if (animationDelta <= 0) return;
-
-      // Batch: if delta is huge (>500), group into fewer increments
-      if (animationDelta > 500) {
-        const batchCount = 200;
-        const perBatch = Math.ceil(animationDelta / batchCount);
-        for (let i = 0; i < batchCount; i++) {
-          const delay = (i / batchCount) * duration;
-          const inc = i === batchCount - 1 ? animationDelta - perBatch * i : perBatch;
-          if (inc <= 0) continue;
-          const timer = setTimeout(() => {
-            displayRef.current = Math.min(displayRef.current + inc, targetRef.current);
-            setDisplayCount(displayRef.current);
-          }, delay);
-          timersRef.current.push(timer);
-        }
-      } else {
-        // Schedule individual increments at random times spread across `duration`
-        const times: number[] = [];
-        for (let i = 0; i < animationDelta; i++) {
-          times.push(Math.random() * duration);
-        }
-        times.sort((a, b) => a - b);
-
-        for (let i = 0; i < animationDelta; i++) {
-          const timer = setTimeout(() => {
-            displayRef.current += 1;
-            setDisplayCount(displayRef.current);
-          }, times[i]);
-          timersRef.current.push(timer);
-        }
-      }
+      // Kick off the animation loop (no-op if already running)
+      startAnimation();
     },
-    [duration, clearTimers],
+    [startAnimation],
   );
 
   // Immediately add local clicks (no animation delay for your own clicks)
@@ -90,13 +85,14 @@ export function useAnimatedCount(duration = 2000) {
     targetRef.current += n;
     displayRef.current += n;
     setDisplayCount(displayRef.current);
-    // Mark as initialized so we don't jump again on first poll
     initializedRef.current = true;
   }, []);
 
   useEffect(() => {
-    return clearTimers;
-  }, [clearTimers]);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   return { displayCount, setTarget, addImmediate };
 }
