@@ -127,12 +127,12 @@ export default function App() {
       if (pendingRef.current <= 0) return;
       const batch = pendingRef.current;
       pendingRef.current = 0;
-      navigator.sendBeacon(
-        `${WORKER_URL}/click`,
-        new Blob([JSON.stringify({ count: batch, token: turnstileTokenRef.current })], {
-          type: "text/plain",
-        }),
-      );
+      fetch(`${WORKER_URL}/click`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: batch, token: turnstileTokenRef.current }),
+        keepalive: true,
+      }).catch(() => {});
     };
     const onVisChange = () => {
       if (document.visibilityState === "hidden") flush();
@@ -198,6 +198,7 @@ export default function App() {
             onClick={handleClick}
             className={`btn-dome relative h-44 w-44 cursor-pointer rounded-full border-0 outline-none${isPressed ? " pressed" : ""}`}
             aria-label="Click the button"
+            tabIndex={-1}
           >
             {/* Specular highlight */}
             <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_35%_30%,_rgba(255,255,255,0.25)_0%,_transparent_50%)]" />
