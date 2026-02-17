@@ -17,6 +17,8 @@ export default function App() {
     useAnimatedCount(POLL_INTERVAL_MS);
   const [clicksPerSecond, setClicksPerSecond] = useState(0);
   const [isPressed, setIsPressed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef(0);
   const clickTimestampsRef = useRef<number[]>([]);
   const turnstileTokenRef = useRef<string>("");
@@ -113,9 +115,20 @@ export default function App() {
           const data = (await resp.json()) as { ok: boolean; total: number };
           localDeltaRef.current = Math.max(0, localDeltaRef.current - batch);
           setTarget(data.total + localDeltaRef.current);
+          setError(null);
+        } else if (resp.status === 429) {
+          pendingRef.current += batch;
+          setError("slow down!");
+          if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+          errorTimerRef.current = setTimeout(() => setError(null), 3000);
+        } else {
+          pendingRef.current += batch;
         }
       } catch {
         pendingRef.current += batch;
+        setError("connection lost");
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => setError(null), 3000);
       }
     }, BATCH_INTERVAL_MS);
     return () => clearInterval(interval);
@@ -206,12 +219,14 @@ export default function App() {
         </div>
 
         {/* Stats */}
-        <div className="h-5 font-mono text-xs tracking-widest text-warm-muted uppercase">
-          {clicksPerSecond > 0 && (
-            <span>
+        <div className="h-5 font-mono text-xs tracking-widest uppercase">
+          {error ? (
+            <span className="text-ember animate-pulse">{error}</span>
+          ) : clicksPerSecond > 0 ? (
+            <span className="text-warm-muted">
               {clicksPerSecond} click{clicksPerSecond !== 1 && "s"}/sec
             </span>
-          )}
+          ) : null}
         </div>
       </div>
 
