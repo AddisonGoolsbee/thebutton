@@ -91,27 +91,38 @@ async function handleClick(
   }
 
   const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const ipHash = await hashIP(ip);
 
   // Validate turnstile token (skip in local dev)
   const token = body.token;
   const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "unknown";
   if (!isLocal) {
-    if (typeof token !== "string" || !token) {
-      return new Response(JSON.stringify({ error: "missing turnstile token" }), {
-        status: 400,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-    const turnstileOk = await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, ip);
-    if (!turnstileOk) {
-      return new Response(JSON.stringify({ error: "bot detected" }), {
-        status: 403,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+    // Check if this IP was verified recently (within 60 seconds)
+    const recentVerify = await env.DB.prepare(
+      "SELECT 1 FROM turnstile_verified WHERE ip_hash = ? AND verified_at > datetime('now', '-60 seconds')",
+    ).bind(ipHash).first();
+
+    if (!recentVerify) {
+      // Need a fresh Turnstile token
+      if (typeof token !== "string" || !token) {
+        return new Response(JSON.stringify({ error: "missing turnstile token" }), {
+          status: 400,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
+      }
+      const turnstileOk = await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, ip);
+      if (!turnstileOk) {
+        return new Response(JSON.stringify({ error: "bot detected" }), {
+          status: 403,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
+      }
+      // Mark IP as verified
+      await env.DB.prepare(
+        "INSERT OR REPLACE INTO turnstile_verified (ip_hash, verified_at) VALUES (?, datetime('now'))",
+      ).bind(ipHash).run();
     }
   }
-
-  const ipHash = await hashIP(ip);
   const country = request.headers.get("CF-IPCountry") ?? "unknown";
 
   // Rate limit: max 10 batches per 5 seconds per IP

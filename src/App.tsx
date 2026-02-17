@@ -26,26 +26,38 @@ export default function App() {
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY) return;
 
-    const script = document.createElement("script");
-    script.src =
-      "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad";
-    script.async = true;
+    const containerId = "turnstile-container";
 
-    (window as any).onTurnstileLoad = () => {
-      (window as any).turnstile.render("#turnstile-container", {
+    const renderWidget = () => {
+      const container = document.getElementById(containerId);
+      // Don't render if container already has a widget
+      if (!container || container.childElementCount > 0) return;
+      (window as any).turnstile.render(`#${containerId}`, {
         sitekey: TURNSTILE_SITE_KEY,
         callback: (token: string) => {
           turnstileTokenRef.current = token;
         },
         "refresh-expired": "auto",
-        size: "invisible",
+        size: "flexible",
       });
     };
 
-    document.head.appendChild(script);
-    return () => {
-      document.head.removeChild(script);
-    };
+    // If Turnstile script is already loaded, just render
+    if ((window as any).turnstile) {
+      renderWidget();
+      return;
+    }
+
+    // Avoid loading the script twice
+    if (!document.querySelector('script[src*="turnstile"]')) {
+      const script = document.createElement("script");
+      script.src =
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+
+    (window as any).onTurnstileLoad = renderWidget;
   }, []);
 
   // Track clicks/sec for display
@@ -108,6 +120,30 @@ export default function App() {
     }, BATCH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [setTarget]);
+
+  // Flush pending clicks on page close/navigation
+  useEffect(() => {
+    const flush = () => {
+      if (pendingRef.current <= 0) return;
+      const batch = pendingRef.current;
+      pendingRef.current = 0;
+      navigator.sendBeacon(
+        `${WORKER_URL}/click`,
+        new Blob([JSON.stringify({ count: batch, token: turnstileTokenRef.current })], {
+          type: "text/plain",
+        }),
+      );
+    };
+    const onVisChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("visibilitychange", onVisChange);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("visibilitychange", onVisChange);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, []);
 
   const handleClick = useCallback(() => {
     const now = Date.now();

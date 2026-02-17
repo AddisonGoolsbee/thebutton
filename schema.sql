@@ -17,3 +17,9 @@ CREATE TABLE IF NOT EXISTS click_batches (
 -- Index for rate limiting lookups
 CREATE INDEX IF NOT EXISTS idx_batches_ip_time
   ON click_batches (ip_hash, created_at DESC);
+
+-- Turnstile verification cache (so tokens don't need to be single-use per batch)
+CREATE TABLE IF NOT EXISTS turnstile_verified (
+  ip_hash TEXT PRIMARY KEY,
+  verified_at TEXT NOT NULL
+);
