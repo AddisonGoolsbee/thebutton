@@ -75,7 +75,7 @@ export default function App() {
   useEffect(() => {
     const fetchCount = async () => {
       try {
-        const resp = await fetch(`${WORKER_URL}/count`);
+        const resp = await fetch(`${WORKER_URL}/count`, { cache: "no-store" });
         if (resp.ok) {
           const data = (await resp.json()) as { total: number };
           setTarget(data.total + localDeltaRef.current);

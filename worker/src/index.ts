@@ -71,7 +71,7 @@ async function handleCount(env: Env, request: Request): Promise<Response> {
     headers: {
       ...corsHeaders(request),
       "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${CACHE_TTL_SECONDS}`,
+      "Cache-Control": `public, s-maxage=${CACHE_TTL_SECONDS}, max-age=0`,
     },
   });
 
