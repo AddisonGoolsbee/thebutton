@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 /**
- * Smoothly animates between count values using a continuous rAF loop.
+ * Smoothly animates between count values.
  *
  * - First call to setTarget jumps instantly (page load).
- * - Subsequent calls feed a rAF loop that probabilistically increments,
- *   giving a random "real-time" feel with zero gaps between polls.
+ * - Subsequent calls animate linearly over `duration` ms with random jitter,
+ *   guaranteeing the display reaches the target before the next poll.
  * - addImmediate() is always instant (for your own clicks).
  */
 export function useAnimatedCount(duration = 2000) {
@@ -14,31 +14,35 @@ export function useAnimatedCount(duration = 2000) {
   const displayRef = useRef(0);
   const initializedRef = useRef(false);
   const rafRef = useRef(0);
-  const lastFrameRef = useRef(0);
+  const animStartRef = useRef(0);
+  const animStartDisplayRef = useRef(0);
+  const animTargetRef = useRef(0);
 
-  // rAF tick: each frame, probabilistically increment toward target.
-  // Rate = gap * (dt / duration), giving an organic exponential approach.
   const tick = useCallback(
     (now: number) => {
-      const gap = targetRef.current - displayRef.current;
-      if (gap <= 0) {
+      const elapsed = now - animStartRef.current;
+      const totalGap = animTargetRef.current - animStartDisplayRef.current;
+
+      if (totalGap <= 0 || elapsed >= duration) {
+        // Animation complete — snap to current target (which may have advanced)
+        if (displayRef.current < targetRef.current) {
+          displayRef.current = targetRef.current;
+          setDisplayCount(displayRef.current);
+        }
         rafRef.current = 0;
         return;
       }
 
-      const dt = Math.min(now - lastFrameRef.current, 100); // cap dt to avoid big jumps after tab-switch
-      lastFrameRef.current = now;
+      // Linear progress with slight random jitter for organic feel
+      const progress = elapsed / duration;
+      const targetDisplay = animStartDisplayRef.current + Math.round(totalGap * progress);
 
-      // Expected increments this frame
-      const expected = gap * (dt / duration);
+      // Add small random jitter: sometimes +1, sometimes skip a frame
+      const jitteredTarget = targetDisplay + (Math.random() < 0.3 ? 1 : 0);
+      const newDisplay = Math.min(jitteredTarget, targetRef.current);
 
-      // Probabilistic rounding gives a natural random feel
-      const floor = Math.floor(expected);
-      const frac = expected - floor;
-      const inc = floor + (Math.random() < frac ? 1 : 0);
-
-      if (inc > 0) {
-        displayRef.current = Math.min(displayRef.current + inc, targetRef.current);
+      if (newDisplay > displayRef.current) {
+        displayRef.current = newDisplay;
         setDisplayCount(displayRef.current);
       }
 
@@ -47,15 +51,20 @@ export function useAnimatedCount(duration = 2000) {
     [duration],
   );
 
-  const startAnimation = useCallback(() => {
-    if (rafRef.current) return; // already running
-    lastFrameRef.current = performance.now();
-    rafRef.current = requestAnimationFrame(tick);
-  }, [tick]);
+  const startAnimation = useCallback(
+    (fromDisplay: number, toTarget: number) => {
+      animStartRef.current = performance.now();
+      animStartDisplayRef.current = fromDisplay;
+      animTargetRef.current = toTarget;
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    },
+    [tick],
+  );
 
   const setTarget = useCallback(
     (newTarget: number) => {
-      // Only animate upward
       if (newTarget <= targetRef.current) return;
 
       targetRef.current = newTarget;
@@ -68,24 +77,20 @@ export function useAnimatedCount(duration = 2000) {
         return;
       }
 
-      // Show one increment immediately for responsiveness
-      if (displayRef.current < targetRef.current) {
-        displayRef.current += 1;
-        setDisplayCount(displayRef.current);
-      }
-
-      // Kick off the animation loop (no-op if already running)
-      startAnimation();
+      // Start or restart animation from current display to new target
+      startAnimation(displayRef.current, newTarget);
     },
     [startAnimation],
   );
 
-  // Immediately add local clicks (no animation delay for your own clicks)
   const addImmediate = useCallback((n: number) => {
     targetRef.current += n;
     displayRef.current += n;
     setDisplayCount(displayRef.current);
     initializedRef.current = true;
+    // Update animation anchors so in-progress animation doesn't overshoot
+    animStartDisplayRef.current += n;
+    animTargetRef.current = targetRef.current;
   }, []);
 
   useEffect(() => {
