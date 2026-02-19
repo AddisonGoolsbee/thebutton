@@ -74,12 +74,22 @@ body,
   animation: breathe 3s ease-in-out infinite;
 }
 
-/* Subtle count tick flash */
-@keyframes tick-flash {
+/* Counter reveal: fade in + deblur */
+@keyframes counter-reveal {
   0% {
-    text-shadow: 0 0 30px rgba(255, 77, 0, 0.5);
+    opacity: 0;
+    filter: blur(16px);
+  }
+  40% {
+    opacity: 0.5;
+    filter: blur(6px);
   }
   100% {
-    text-shadow: 0 0 0px rgba(255, 77, 0, 0);
+    opacity: 1;
+    filter: blur(0px);
   }
+}
+
+.counter-reveal {
+  animation: counter-reveal 0.5s ease-out forwards;
 }
