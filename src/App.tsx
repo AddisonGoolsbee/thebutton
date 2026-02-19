@@ -176,7 +176,7 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-void select-none">
       {/* Radial background glow */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--color-ember-deep)_0%,_transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--color-ember-deep)_0%,transparent_70%)]" />
 
       {/* Subtle noise texture overlay */}
       <div
@@ -209,7 +209,7 @@ export default function App() {
             tabIndex={-1}
           >
             {/* Specular highlight */}
-            <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_35%_30%,_rgba(255,255,255,0.25)_0%,_transparent_50%)]" />
+            <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.25)_0%,transparent_50%)]" />
           </button>
         </div>
 
