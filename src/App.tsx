@@ -74,6 +74,7 @@ export default function App() {
   // Poll server for global count
   useEffect(() => {
     const fetchCount = async () => {
+      if (document.visibilityState === "hidden") return;
       try {
         const resp = await fetch(`${WORKER_URL}/count`, { cache: "no-store" });
         if (resp.ok) {
