@@ -189,10 +189,7 @@ export default function App() {
       <div className="relative z-10 flex flex-col items-center gap-12">
         {/* Counter */}
         <div
-          className="font-mono text-[clamp(3rem,15vw,10rem)] leading-none font-black tracking-tighter text-warm-white transition-all duration-75"
-          style={{
-            textShadow: isPressed ? "0 0 40px rgba(255, 77, 0, 0.6)" : "0 0 0px rgba(255, 77, 0, 0)",
-          }}
+          className="font-mono text-[clamp(3rem,15vw,10rem)] leading-none font-black tracking-tighter text-warm-white"
         >
           {displayCount !== null ? formatNumber(displayCount) : "\u00A0"}
         </div>
@@ -204,6 +201,7 @@ export default function App() {
 
           {/* The dome button */}
           <button
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handleClick}
             className={`btn-dome relative h-44 w-44 cursor-pointer rounded-full border-0 outline-none${isPressed ? " pressed" : ""}`}
             aria-label="Click the button"
