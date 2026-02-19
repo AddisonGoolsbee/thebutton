@@ -3,17 +3,22 @@ interface Env {
   TURNSTILE_SECRET_KEY: string;
 }
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+const ALLOWED_ORIGINS = [
+  "https://theglobalcounter.com",
+  "http://localhost:5173",
+  "http://localhost:4173",
+];
+
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("Origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
 
 const CACHE_TTL_SECONDS = 2;
-
-// Cloudflare's test secret key — always passes validation.
-// Used when running locally via `wrangler dev`.
-const TURNSTILE_TEST_SECRET = "1x0000000000000000000000000000000AA";
 
 async function hashIP(ip: string): Promise<string> {
   const data = new TextEncoder().encode(ip);
@@ -28,24 +33,30 @@ async function verifyTurnstile(
   secret: string,
   ip: string,
 ): Promise<boolean> {
-  const resp = await fetch(
-    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ secret, response: token, remoteip: ip }),
-    },
-  );
-  const data = (await resp.json()) as { success: boolean };
-  return data.success;
+  try {
+    const resp = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ secret, response: token, remoteip: ip }),
+      },
+    );
+    const data = (await resp.json()) as { success: boolean };
+    return data.success;
+  } catch {
+    return false;
+  }
 }
 
 async function handleCount(env: Env, request: Request): Promise<Response> {
+  const origin = request.headers.get("Origin") ?? "none";
+  const cacheUrl = new URL(`/count?origin=${encodeURIComponent(origin)}`, request.url).toString();
+
   // Try edge cache (only works in production, not wrangler dev)
   try {
     const cache = caches.default;
-    const cacheKey = new Request(new URL("/count", request.url).toString());
-    const cached = await cache.match(cacheKey);
+    const cached = await cache.match(new Request(cacheUrl));
     if (cached) return cached;
   } catch {
     // Cache API not available in local dev — skip
@@ -57,7 +68,7 @@ async function handleCount(env: Env, request: Request): Promise<Response> {
 
   const response = new Response(JSON.stringify({ total: result?.total ?? 0 }), {
     headers: {
-      ...CORS_HEADERS,
+      ...corsHeaders(request),
       "Content-Type": "application/json",
       "Cache-Control": `public, max-age=${CACHE_TTL_SECONDS}`,
     },
@@ -66,8 +77,7 @@ async function handleCount(env: Env, request: Request): Promise<Response> {
   // Store in edge cache (production only)
   try {
     const cache = caches.default;
-    const cacheKey = new Request(new URL("/count", request.url).toString());
-    await cache.put(cacheKey, response.clone());
+    await cache.put(new Request(cacheUrl), response.clone());
   } catch {
     // Cache API not available in local dev — skip
   }
@@ -79,14 +89,22 @@ async function handleClick(
   env: Env,
   request: Request,
 ): Promise<Response> {
-  const body = (await request.json()) as { count?: number; token?: string };
+  let body: { count?: number; token?: string };
+  try {
+    body = (await request.json()) as { count?: number; token?: string };
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid JSON" }), {
+      status: 400,
+      headers: { ...corsHeaders(request), "Content-Type": "application/json" },
+    });
+  }
 
   // Validate count
   const count = body.count;
   if (typeof count !== "number" || count < 1 || count > 200 || !Number.isInteger(count)) {
     return new Response(JSON.stringify({ error: "count must be integer 1-200" }), {
       status: 400,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(request), "Content-Type": "application/json" },
     });
   }
 
@@ -107,14 +125,14 @@ async function handleClick(
       if (typeof token !== "string" || !token) {
         return new Response(JSON.stringify({ error: "missing turnstile token" }), {
           status: 400,
-          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          headers: { ...corsHeaders(request), "Content-Type": "application/json" },
         });
       }
       const turnstileOk = await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, ip);
       if (!turnstileOk) {
         return new Response(JSON.stringify({ error: "bot detected" }), {
           status: 403,
-          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          headers: { ...corsHeaders(request), "Content-Type": "application/json" },
         });
       }
       // Mark IP as verified
@@ -125,42 +143,44 @@ async function handleClick(
   }
   const country = request.headers.get("CF-IPCountry") ?? "unknown";
 
-  // Rate limit: max 10 batches per 5 seconds per IP
-  const rateCheck = await env.DB.prepare(
-    "SELECT COUNT(*) as cnt FROM click_batches WHERE ip_hash = ? AND created_at > datetime('now', '-5 seconds')",
-  ).bind(ipHash).first<{ cnt: number }>();
+  // Rate limit + insert atomically via conditional INSERT
+  // Only inserts if IP is under 200 clicks in the last 5 seconds
+  const insertResult = await env.DB.prepare(
+    `INSERT INTO click_batches (count, ip_hash, country)
+     SELECT ?, ?, ?
+     WHERE (SELECT COALESCE(SUM(count), 0) FROM click_batches WHERE ip_hash = ? AND created_at > datetime('now', '-5 seconds')) + ? <= 200`,
+  ).bind(count, ipHash, country, ipHash, count).run();
 
-  if (rateCheck && rateCheck.cnt >= 10) {
+  if (!insertResult.meta.changes) {
     return new Response(JSON.stringify({ error: "rate limited" }), {
       status: 429,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(request), "Content-Type": "application/json" },
     });
   }
 
-  // Insert batch + increment counter atomically
+  // Increment counter and read new total
   const results = await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO click_batches (count, ip_hash, country) VALUES (?, ?, ?)",
-    ).bind(count, ipHash, country),
     env.DB.prepare(
       "UPDATE counter SET total = total + ? WHERE id = 1",
     ).bind(count),
     env.DB.prepare("SELECT total FROM counter WHERE id = 1"),
   ]);
 
-  const newTotal = (results[2].results[0] as { total: number }).total;
+  const newTotal = (results[1].results[0] as { total: number }).total;
 
-  // Invalidate edge cache (production only)
+  // Invalidate edge cache for all origins (production only)
   try {
     const cache = caches.default;
-    const cacheKey = new Request(new URL("/count", request.url).toString());
-    await cache.delete(cacheKey);
+    for (const o of [...ALLOWED_ORIGINS, "none"]) {
+      const cacheUrl = new URL(`/count?origin=${encodeURIComponent(o)}`, request.url).toString();
+      await cache.delete(new Request(cacheUrl));
+    }
   } catch {
     // Cache API not available in local dev
   }
 
   return new Response(JSON.stringify({ ok: true, total: newTotal }), {
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: { ...corsHeaders(request), "Content-Type": "application/json" },
   });
 }
 
@@ -168,7 +188,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Handle CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: CORS_HEADERS });
+      return new Response(null, { headers: corsHeaders(request) });
     }
 
     const url = new URL(request.url);
@@ -181,6 +201,6 @@ export default {
       return handleClick(env, request);
     }
 
-    return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+    return new Response("Not found", { status: 404, headers: corsHeaders(request) });
   },
 };

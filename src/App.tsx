@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useAnimatedCount } from "./useAnimatedCount";
 
-const CLICK_CAP_PER_SECOND = 100;
+const CLICK_CAP_PER_SECOND = 40;
 const BATCH_INTERVAL_MS = 1000;
 const POLL_INTERVAL_MS = 2000;
 
@@ -13,12 +13,12 @@ function formatNumber(n: number): string {
 }
 
 export default function App() {
-  const { displayCount, setTarget, addImmediate } =
-    useAnimatedCount(POLL_INTERVAL_MS);
+  const { displayCount, setTarget, addImmediate } = useAnimatedCount(POLL_INTERVAL_MS);
   const [clicksPerSecond, setClicksPerSecond] = useState(0);
   const [isPressed, setIsPressed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rateLimitedUntilRef = useRef(0);
   const pendingRef = useRef(0);
   const clickTimestampsRef = useRef<number[]>([]);
   const turnstileTokenRef = useRef<string>("");
@@ -53,8 +53,7 @@ export default function App() {
     // Avoid loading the script twice
     if (!document.querySelector('script[src*="turnstile"]')) {
       const script = document.createElement("script");
-      script.src =
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad";
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad";
       script.async = true;
       document.head.appendChild(script);
     }
@@ -66,9 +65,7 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      clickTimestampsRef.current = clickTimestampsRef.current.filter(
-        (t) => now - t < 1000,
-      );
+      clickTimestampsRef.current = clickTimestampsRef.current.filter((t) => now - t < 1000);
       setClicksPerSecond(clickTimestampsRef.current.length);
     }, 200);
     return () => clearInterval(interval);
@@ -97,9 +94,10 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(async () => {
       if (pendingRef.current <= 0) return;
+      if (Date.now() < rateLimitedUntilRef.current) return;
 
-      const batch = pendingRef.current;
-      pendingRef.current = 0;
+      const batch = Math.min(pendingRef.current, 200);
+      pendingRef.current -= batch;
 
       try {
         const resp = await fetch(`${WORKER_URL}/click`, {
@@ -118,11 +116,13 @@ export default function App() {
           setError(null);
         } else if (resp.status === 429) {
           pendingRef.current += batch;
+          rateLimitedUntilRef.current = Date.now() + 5000;
           setError("slow down!");
           if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
           errorTimerRef.current = setTimeout(() => setError(null), 3000);
         } else {
-          pendingRef.current += batch;
+          // 400/403 — don't retry, clicks are lost (bad token, invalid request)
+          localDeltaRef.current = Math.max(0, localDeltaRef.current - batch);
         }
       } catch {
         pendingRef.current += batch;
@@ -138,8 +138,8 @@ export default function App() {
   useEffect(() => {
     const flush = () => {
       if (pendingRef.current <= 0) return;
-      const batch = pendingRef.current;
-      pendingRef.current = 0;
+      const batch = Math.min(pendingRef.current, 200);
+      pendingRef.current -= batch;
       fetch(`${WORKER_URL}/click`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -160,9 +160,7 @@ export default function App() {
 
   const handleClick = useCallback(() => {
     const now = Date.now();
-    const recentClicks = clickTimestampsRef.current.filter(
-      (t) => now - t < 1000,
-    );
+    const recentClicks = clickTimestampsRef.current.filter((t) => now - t < 1000);
     if (recentClicks.length >= CLICK_CAP_PER_SECOND) return;
 
     clickTimestampsRef.current.push(now);
@@ -193,9 +191,7 @@ export default function App() {
         <div
           className="font-mono text-[clamp(3rem,15vw,10rem)] leading-none font-black tracking-tighter text-warm-white transition-all duration-75"
           style={{
-            textShadow: isPressed
-              ? "0 0 40px rgba(255, 77, 0, 0.6)"
-              : "0 0 0px rgba(255, 77, 0, 0)",
+            textShadow: isPressed ? "0 0 40px rgba(255, 77, 0, 0.6)" : "0 0 0px rgba(255, 77, 0, 0)",
           }}
         >
           {formatNumber(displayCount)}
