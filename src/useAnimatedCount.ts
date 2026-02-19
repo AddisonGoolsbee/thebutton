@@ -9,7 +9,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
  * - addImmediate() is always instant (for your own clicks).
  */
 export function useAnimatedCount(duration = 2000) {
-  const [displayCount, setDisplayCount] = useState(0);
+  const [displayCount, setDisplayCount] = useState<number | null>(null);
   const targetRef = useRef(0);
   const displayRef = useRef(0);
   const initializedRef = useRef(false);

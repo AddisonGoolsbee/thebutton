@@ -194,7 +194,7 @@ export default function App() {
             textShadow: isPressed ? "0 0 40px rgba(255, 77, 0, 0.6)" : "0 0 0px rgba(255, 77, 0, 0)",
           }}
         >
-          {formatNumber(displayCount)}
+          {displayCount !== null ? formatNumber(displayCount) : "\u00A0"}
         </div>
 
         {/* Button assembly */}
