@@ -5,6 +5,7 @@ interface Env {
 
 const ALLOWED_ORIGINS = [
   "https://theglobalcounter.com",
+  "https://www.theglobalcounter.com",
   "http://localhost:5173",
   "http://localhost:4173",
 ];

@@ -1,6 +1,11 @@
 name = "click-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
+workers_dev = true
+
+routes = [
+  { pattern = "api.theglobalcounter.com", custom_domain = true }
+]
 
 [[d1_databases]]
 binding = "DB"
