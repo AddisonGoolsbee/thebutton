@@ -19,7 +19,6 @@ function corsHeaders(request: Request) {
   };
 }
 
-const CACHE_TTL_SECONDS = 2;
 
 async function hashIP(ip: string): Promise<string> {
   const data = new TextEncoder().encode(ip);
@@ -51,39 +50,16 @@ async function verifyTurnstile(
 }
 
 async function handleCount(env: Env, request: Request): Promise<Response> {
-  const origin = request.headers.get("Origin") ?? "none";
-  const cacheUrl = new URL(`/count?origin=${encodeURIComponent(origin)}`, request.url).toString();
-
-  // Try edge cache (only works in production, not wrangler dev)
-  try {
-    const cache = caches.default;
-    const cached = await cache.match(new Request(cacheUrl));
-    if (cached) return cached;
-  } catch {
-    // Cache API not available in local dev — skip
-  }
-
   const result = await env.DB.prepare(
     "SELECT total FROM counter WHERE id = 1",
   ).first<{ total: number }>();
 
-  const response = new Response(JSON.stringify({ total: result?.total ?? 0 }), {
+  return new Response(JSON.stringify({ total: result?.total ?? 0 }), {
     headers: {
       ...corsHeaders(request),
       "Content-Type": "application/json",
-      "Cache-Control": `public, s-maxage=${CACHE_TTL_SECONDS}, max-age=0`,
     },
   });
-
-  // Store in edge cache (production only)
-  try {
-    const cache = caches.default;
-    await cache.put(new Request(cacheUrl), response.clone());
-  } catch {
-    // Cache API not available in local dev — skip
-  }
-
-  return response;
 }
 
 async function handleClick(
@@ -168,17 +144,6 @@ async function handleClick(
   ]);
 
   const newTotal = (results[1].results[0] as { total: number }).total;
-
-  // Invalidate edge cache for all origins (production only)
-  try {
-    const cache = caches.default;
-    for (const o of [...ALLOWED_ORIGINS, "none"]) {
-      const cacheUrl = new URL(`/count?origin=${encodeURIComponent(o)}`, request.url).toString();
-      await cache.delete(new Request(cacheUrl));
-    }
-  } catch {
-    // Cache API not available in local dev
-  }
 
   return new Response(JSON.stringify({ ok: true, total: newTotal }), {
     headers: { ...corsHeaders(request), "Content-Type": "application/json" },
